@@ -8,6 +8,7 @@ export interface BitBackend {
   readdir(path: string): Iterable<string> | ArrayLike<string>;
   isDir(path: string): boolean;
   isFile(path: string): boolean;
+  mtime(path: string): [number, number];
 }
 
 export type BitHost = BitBackend;

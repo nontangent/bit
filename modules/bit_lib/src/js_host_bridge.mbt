@@ -16,15 +16,6 @@ fn js_make_host_fs(host_id : Int) -> LibJsHostFs {
 }
 
 ///|
-fn js_bytes_to_array(bytes : Bytes) -> Array[Byte] {
-  let out : Array[Byte] = Array::new(capacity=bytes.length())
-  for i in 0..<bytes.length() {
-    out.push(bytes[i])
-  }
-  out
-}
-
-///|
 fn js_host_error_message() -> String {
   lib_js_host_last_error()
 }
@@ -45,7 +36,7 @@ extern "js" fn lib_js_host_last_error() -> String =
 extern "js" fn lib_js_host_write_file(
   host_id : Int,
   path : String,
-  content : Array[Byte],
+  content : Bytes,
 ) -> String? =
   #| (hostId, path, content) => {
   #|   const state = globalThis.__bitGitJsState ??= { nextHostId: 1, hosts: new Map() };
@@ -57,7 +48,9 @@ extern "js" fn lib_js_host_write_file(
   #|     return 'bit-git js host.writeFile(path, bytes) is required';
   #|   }
   #|   try {
-  #|     host.writeFile(path, Uint8Array.from(content ?? []));
+  #|     host.writeFile(path, ArrayBuffer.isView(content)
+  #|       ? content
+  #|       : Uint8Array.from(content ?? []));
   #|     return undefined;
   #|   } catch (error) {
   #|     return String(error?.message ?? error);
@@ -148,37 +141,37 @@ extern "js" fn lib_js_host_remove_dir(host_id : Int, path : String) -> String? =
 extern "js" fn lib_js_host_read_file(
   host_id : Int,
   path : String,
-) -> Array[Byte]? =
+) -> Bytes? =
   #| (hostId, path) => {
   #|   const state = globalThis.__bitGitJsState ??= { nextHostId: 1, hosts: new Map() };
   #|   const host = state.hosts.get(hostId);
   #|   if (!host) {
   #|     globalThis.__bitGitJsLastError = `bit-git js host ${hostId} not found`;
-  #|     return { $tag: 0 };
+  #|     return undefined;
   #|   }
   #|   if (typeof host.readFile !== 'function') {
   #|     globalThis.__bitGitJsLastError = 'bit-git js host.readFile(path) is required';
-  #|     return { $tag: 0 };
+  #|     return undefined;
   #|   }
   #|   try {
   #|     const value = host.readFile(path);
   #|     if (value instanceof Uint8Array) {
-  #|       return { $tag: 1, _0: Array.from(value) };
+  #|       return value;
   #|     }
   #|     if (value instanceof ArrayBuffer) {
-  #|       return { $tag: 1, _0: Array.from(new Uint8Array(value)) };
+  #|       return new Uint8Array(value);
   #|     }
   #|     if (Array.isArray(value)) {
-  #|       return { $tag: 1, _0: value.map((item) => Number(item) & 0xff) };
+  #|       return Uint8Array.from(value.map((item) => Number(item) & 0xff));
   #|     }
   #|     if (typeof value === 'string') {
-  #|       return { $tag: 1, _0: Array.from(new TextEncoder().encode(value)) };
+  #|       return new TextEncoder().encode(value);
   #|     }
   #|     globalThis.__bitGitJsLastError = 'bit-git js host.readFile must return Uint8Array, ArrayBuffer, Array<number>, or string';
-  #|     return { $tag: 0 };
+  #|     return undefined;
   #|   } catch (error) {
   #|     globalThis.__bitGitJsLastError = String(error?.message ?? error);
-  #|     return { $tag: 0 };
+  #|     return undefined;
   #|   }
   #| }
 
@@ -438,10 +431,7 @@ pub fn js_host_read_string(
   path : String,
 ) -> Result[String, String] {
   match lib_js_host_read_file(host_id, path) {
-    Some(bytes) => {
-      let content = Bytes::from_array(bytes)
-      Ok(@utf8.decode_lossy(content[:]))
-    }
+    Some(content) => Ok(@utf8.decode_lossy(content[:]))
     None => Err(js_host_error_message())
   }
 }
@@ -456,7 +446,7 @@ impl @bit.FileSystem for LibJsHostFs with fn mkdir_p(self, path) {
 
 ///|
 impl @bit.FileSystem for LibJsHostFs with fn write_file(self, path, content) {
-  match lib_js_host_write_file(self.host_id, path, js_bytes_to_array(content)) {
+  match lib_js_host_write_file(self.host_id, path, content) {
     Some(error) => raise @bit.GitError::IoError(error)
     None => ()
   }
@@ -489,7 +479,7 @@ impl @bit.FileSystem for LibJsHostFs with fn remove_dir(self, path) {
 ///|
 impl @bit.RepoFileSystem for LibJsHostFs with fn read_file(self, path) {
   match lib_js_host_read_file(self.host_id, path) {
-    Some(content) => Bytes::from_array(content)
+    Some(content) => content
     None => raise @bit.GitError::IoError(js_host_error_message())
   }
 }

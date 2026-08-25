@@ -368,12 +368,25 @@ pub struct FetchPackResult {
 }
 
 ///|
+/// Concatenate side-band fragments into the packfile with a single allocation.
+fn join_pack_fragments(chunks : Array[Bytes], total : Int) -> Bytes {
+  let out = FixedArray::make(total, b'\x00')
+  let mut pos = 0
+  for chunk in chunks {
+    out.blit_from_bytes(pos, chunk, 0, chunk.length())
+    pos += chunk.length()
+  }
+  Bytes::from_fixedarray(out)
+}
+
+///|
 pub fn parse_fetch_response_v2(
   data : Bytes,
 ) -> FetchPackResult raise @bit.GitError {
   let lines = pktline_decode(data)
   let mut in_pack = false
-  let chunks : Array[Byte] = []
+  let chunks : Array[Bytes] = []
+  let mut pack_len = 0
   let shallow : Array[@bit.ObjectId] = []
   let unshallow : Array[@bit.ObjectId] = []
   for item in lines {
@@ -398,28 +411,25 @@ pub fn parse_fetch_response_v2(
     // side-band: channel byte + payload
     let channel = line_bytes[0].to_int()
     if channel == 1 {
-      for i in 1..<line_bytes.length() {
-        chunks.push(line_bytes[i])
-      }
+      // Keep the side-band payload as one fragment per pkt-line and join once
+      // at the end. Pushing byte-by-byte into `Array[Byte]` materialises the
+      // whole pack as a boxed array on the JS backend, which caps packfiles
+      // at ~80 MiB (V8's maximum array length) and is slow everywhere else.
+      let payload = FixedArray::make(line_bytes.length() - 1, b'\x00')
+      payload.blit_from_bytes(0, line_bytes, 1, line_bytes.length() - 1)
+      chunks.push(Bytes::from_fixedarray(payload))
+      pack_len += line_bytes.length() - 1
     } else if channel == 3 {
       // Strip control sequences before they hit the terminal — see
       // `sanitize_sideband_text` for the policy.
-      let payload : Array[Byte] = []
-      for i in 1..<line_bytes.length() {
-        payload.push(line_bytes[i])
-      }
-      let safe = sanitize_sideband_text(
-        Bytes::from_array(FixedArray::makei(payload.length(), i => payload[i])),
-      )
+      let payload = FixedArray::make(line_bytes.length() - 1, b'\x00')
+      payload.blit_from_bytes(0, line_bytes, 1, line_bytes.length() - 1)
+      let safe = sanitize_sideband_text(Bytes::from_fixedarray(payload))
       let msg = bytes_to_string_from(safe, 0)
       raise @bit.GitError::ProtocolError("upload-pack error: \{msg}")
     }
   }
-  {
-    pack: Bytes::from_array(FixedArray::makei(chunks.length(), i => chunks[i])),
-    shallow,
-    unshallow,
-  }
+  { pack: join_pack_fragments(chunks, pack_len), shallow, unshallow }
 }
 
 ///|
@@ -432,7 +442,8 @@ pub fn parse_fetch_response_v0(
   data : Bytes,
 ) -> FetchPackResult raise @bit.GitError {
   let lines = pktline_decode(data)
-  let chunks : Array[Byte] = []
+  let chunks : Array[Bytes] = []
+  let mut pack_len = 0
   let shallow : Array[@bit.ObjectId] = []
   let unshallow : Array[@bit.ObjectId] = []
   for item in lines {
@@ -445,28 +456,25 @@ pub fn parse_fetch_response_v0(
       let line = line_bytes |> bytes_to_string |> trim_newline
       parse_shallow_response_line(line, shallow, unshallow)
     } else if channel == 1 {
-      for i in 1..<line_bytes.length() {
-        chunks.push(line_bytes[i])
-      }
+      // Keep the side-band payload as one fragment per pkt-line and join once
+      // at the end. Pushing byte-by-byte into `Array[Byte]` materialises the
+      // whole pack as a boxed array on the JS backend, which caps packfiles
+      // at ~80 MiB (V8's maximum array length) and is slow everywhere else.
+      let payload = FixedArray::make(line_bytes.length() - 1, b'\x00')
+      payload.blit_from_bytes(0, line_bytes, 1, line_bytes.length() - 1)
+      chunks.push(Bytes::from_fixedarray(payload))
+      pack_len += line_bytes.length() - 1
     } else if channel == 3 {
       // Strip control sequences before they hit the terminal — see
       // `sanitize_sideband_text` for the policy.
-      let payload : Array[Byte] = []
-      for i in 1..<line_bytes.length() {
-        payload.push(line_bytes[i])
-      }
-      let safe = sanitize_sideband_text(
-        Bytes::from_array(FixedArray::makei(payload.length(), i => payload[i])),
-      )
+      let payload = FixedArray::make(line_bytes.length() - 1, b'\x00')
+      payload.blit_from_bytes(0, line_bytes, 1, line_bytes.length() - 1)
+      let safe = sanitize_sideband_text(Bytes::from_fixedarray(payload))
       let msg = bytes_to_string_from(safe, 0)
       raise @bit.GitError::ProtocolError("upload-pack error: \{msg}")
     }
   }
-  {
-    pack: Bytes::from_array(FixedArray::makei(chunks.length(), i => chunks[i])),
-    shallow,
-    unshallow,
-  }
+  { pack: join_pack_fragments(chunks, pack_len), shallow, unshallow }
 }
 
 ///|
