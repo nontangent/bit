@@ -79,13 +79,13 @@ pub fn pktline_decode(data : Bytes) -> Array[(Bytes, Bool)] raise @bit.GitError 
       raise @bit.GitError::ProtocolError("Incomplete pkt-line header")
     }
 
-    // Read 4-byte hex length
-    let len_str = StringBuilder()
+    // Read 4-byte hex length straight from the bytes (no per-line String)
+    let mut len = 0
     for i in 0..<4 {
-      len_str.write_char(data[offset + i].to_int().unsafe_to_char())
+      len = (len << 4) |
+        pkt_hex_char_to_int(data[offset + i].to_int().unsafe_to_char())
     }
     offset += 4
-    let len = parse_pkt_hex_int(len_str.to_string())
     if len == 0 {
       // Flush packet
       result.push((Bytes::from_array([]), true))
@@ -112,23 +112,12 @@ pub fn pktline_decode(data : Bytes) -> Array[(Bytes, Bool)] raise @bit.GitError 
     if offset + payload_len > data.length() {
       raise @bit.GitError::ProtocolError("Incomplete pkt-line payload")
     }
-    let payload : Array[Byte] = []
-    for i in 0..<payload_len {
-      payload.push(data[offset + i])
-    }
+    // Copy the payload with one blit instead of a per-byte push into
+    // `Array[Byte]` (a boxed array on the JS backend).
+    let payload = FixedArray::make(payload_len, b'\x00')
+    payload.blit_from_bytes(0, data, offset, payload_len)
     offset += payload_len
-    result.push((pkt_array_to_bytes(payload), false))
-  }
-  result
-}
-
-///|
-/// Parse hex string to int (simplified, no error handling needed)
-fn parse_pkt_hex_int(s : String) -> Int {
-  let mut result = 0
-  for c in s {
-    result = result << 4
-    result = result | pkt_hex_char_to_int(c)
+    result.push((Bytes::from_array(payload), false))
   }
   result
 }

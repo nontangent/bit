@@ -1,18 +1,6 @@
 ///| JS transport registry bridge for injected HTTP transports.
 
 ///|
-/// A `FixedArray` rather than an `Array`: `Array` is deprecated at the JS FFI
-/// boundary, and a `FixedArray[Byte]` arrives as a `Uint8Array`, which the
-/// bridge's `Uint8Array.from` reads exactly as it read the plain array.
-fn js_transport_bytes_to_fixedarray(bytes : Bytes) -> FixedArray[Byte] {
-  let out = FixedArray::make(bytes.length(), b'\x00')
-  for i in 0..<bytes.length() {
-    out[i] = bytes[i]
-  }
-  out
-}
-
-///|
 fn js_transport_headers_to_arrays(
   headers : Map[String, String],
 ) -> (FixedArray[String], FixedArray[String]) {
@@ -28,77 +16,24 @@ fn js_transport_headers_to_arrays(
 }
 
 ///|
-fn js_transport_b64_decode_char(c : Char) -> Int {
-  if c >= 'A' && c <= 'Z' {
-    c.to_int() - 'A'.to_int()
-  } else if c >= 'a' && c <= 'z' {
-    c.to_int() - 'a'.to_int() + 26
-  } else if c >= '0' && c <= '9' {
-    c.to_int() - '0'.to_int() + 52
-  } else if c == '+' {
-    62
-  } else if c == '/' {
-    63
-  } else {
-    -1
-  }
-}
-
-///|
-fn js_transport_base64_decode(b64 : String) -> Bytes {
-  let out : Array[Byte] = []
-  let chars : Array[Int] = []
-  for c in b64 {
-    if c == '=' {
-      break
-    }
-    let v = js_transport_b64_decode_char(c)
-    if v >= 0 {
-      chars.push(v)
-    }
-  }
-  let mut i = 0
-  while i + 1 < chars.length() {
-    if i + 3 < chars.length() {
-      let n = (chars[i] << 18) |
-        (chars[i + 1] << 12) |
-        (chars[i + 2] << 6) |
-        chars[i + 3]
-      out.push(((n >> 16) & 0xff).to_byte())
-      out.push(((n >> 8) & 0xff).to_byte())
-      out.push((n & 0xff).to_byte())
-      i += 4
-    } else if i + 2 < chars.length() {
-      let n = (chars[i] << 18) | (chars[i + 1] << 12) | (chars[i + 2] << 6)
-      out.push(((n >> 16) & 0xff).to_byte())
-      out.push(((n >> 8) & 0xff).to_byte())
-      i += 3
-    } else {
-      let n = (chars[i] << 18) | (chars[i + 1] << 12)
-      out.push(((n >> 16) & 0xff).to_byte())
-      i += 2
-    }
-  }
-  Bytes::from_array(FixedArray::makei(out.length(), fn(idx) { out[idx] }))
-}
-
-///|
+/// The JS transport externs return the body as raw bytes with the HTTP status
+/// framed into the first 4 bytes (big-endian). Returning a base64 `String`
+/// needs a string 4/3 the size of the payload, which hits V8's maximum string
+/// length (0x1fffffe8) at ~384 MiB; returning `Bytes` keeps the payload as a
+/// single `Uint8Array` with no per-byte conversion.
 fn js_transport_parse_response(
-  raw : String,
+  raw : Bytes,
 ) -> (@bit.HttpResponse, Bytes) raise @bit.GitError {
-  guard raw.find("\n") is Some(split) else {
+  if raw.length() < 4 {
     raise @bit.GitError::ProtocolError("Malformed JS transport response")
   }
-  let status_raw = String::unsafe_substring(raw, start=0, end=split)
-  let body_b64 = String::unsafe_substring(
-    raw,
-    start=split + 1,
-    end=raw.length(),
-  )
-  let status = @string.parse_int(status_raw) catch {
-    _ => raise @bit.GitError::ProtocolError("Invalid JS transport status")
-  }
-  (@bit.HttpResponse::new(status), js_transport_base64_decode(body_b64))
+  let status = (raw[0].to_int() << 24) |
+    (raw[1].to_int() << 16) |
+    (raw[2].to_int() << 8) |
+    raw[3].to_int()
+  let body = FixedArray::make(raw.length() - 4, b'\x00')
+  body.blit_from_bytes(0, raw, 4, raw.length() - 4)
+  (@bit.HttpResponse::new(status), Bytes::from_array(body))
 }
 
 ///|
@@ -107,7 +42,7 @@ extern "js" fn lib_js_transport_get(
   url : String,
   header_names : FixedArray[String],
   header_values : FixedArray[String],
-) -> @js_async.Promise[String] =
+) -> @js_async.Promise[Bytes] =
   #| async (transportId, url, headerNames, headerValues) => {
   #|   const state = globalThis.__bitGitJsTransportState ??= { nextTransportId: 1, transports: new Map() };
   #|   const transport = state.transports.get(transportId);
@@ -135,20 +70,28 @@ extern "js" fn lib_js_transport_get(
   #|     }
   #|     return Uint8Array.from(rawBody);
   #|   })();
-  #|   const bodyB64 = typeof Buffer !== 'undefined'
-  #|     ? Buffer.from(bytes).toString('base64')
-  #|     : btoa(Array.from(bytes, b => String.fromCharCode(b)).join(''));
-  #|   return `${status}\n${bodyB64}`;
+  #|   // Return raw bytes with the status framed into the first 4 bytes
+  #|   // (big-endian). A base64 string would need 4/3 of the payload size and
+  #|   // hits V8's maximum string length (0x1fffffe8) at ~384 MiB. Framing the
+  #|   // status into the payload (instead of a side channel) keeps concurrent
+  #|   // requests on the same transport from reading each other's status.
+  #|   const framed = new Uint8Array(4 + bytes.length);
+  #|   framed[0] = (status >>> 24) & 0xff;
+  #|   framed[1] = (status >>> 16) & 0xff;
+  #|   framed[2] = (status >>> 8) & 0xff;
+  #|   framed[3] = status & 0xff;
+  #|   framed.set(bytes, 4);
+  #|   return framed;
   #| }
 
 ///|
 extern "js" fn lib_js_transport_post(
   transport_id : Int,
   url : String,
-  body : FixedArray[Byte],
+  body : Bytes,
   header_names : FixedArray[String],
   header_values : FixedArray[String],
-) -> @js_async.Promise[String] =
+) -> @js_async.Promise[Bytes] =
   #| async (transportId, url, body, headerNames, headerValues) => {
   #|   const state = globalThis.__bitGitJsTransportState ??= { nextTransportId: 1, transports: new Map() };
   #|   const transport = state.transports.get(transportId);
@@ -159,7 +102,7 @@ extern "js" fn lib_js_transport_post(
   #|   for (let i = 0; i < Math.min(headerNames?.length ?? 0, headerValues?.length ?? 0); i++) {
   #|     headers[String(headerNames[i])] = String(headerValues[i]);
   #|   }
-  #|   const response = await transport.post(url, Uint8Array.from(body ?? []), headers);
+  #|   const response = await transport.post(url, body ?? new Uint8Array(0), headers);
   #|   const status = Math.trunc(response?.status ?? response?.code ?? 200);
   #|   const rawBody = response?.body ?? new Uint8Array();
   #|   const bytes = (() => {
@@ -176,10 +119,18 @@ extern "js" fn lib_js_transport_post(
   #|     }
   #|     return Uint8Array.from(rawBody);
   #|   })();
-  #|   const bodyB64 = typeof Buffer !== 'undefined'
-  #|     ? Buffer.from(bytes).toString('base64')
-  #|     : btoa(Array.from(bytes, b => String.fromCharCode(b)).join(''));
-  #|   return `${status}\n${bodyB64}`;
+  #|   // Return raw bytes with the status framed into the first 4 bytes
+  #|   // (big-endian). A base64 string would need 4/3 of the payload size and
+  #|   // hits V8's maximum string length (0x1fffffe8) at ~384 MiB. Framing the
+  #|   // status into the payload (instead of a side channel) keeps concurrent
+  #|   // requests on the same transport from reading each other's status.
+  #|   const framed = new Uint8Array(4 + bytes.length);
+  #|   framed[0] = (status >>> 24) & 0xff;
+  #|   framed[1] = (status >>> 16) & 0xff;
+  #|   framed[2] = (status >>> 8) & 0xff;
+  #|   framed[3] = status & 0xff;
+  #|   framed.set(bytes, 4);
+  #|   return framed;
   #| }
 
 ///|
@@ -206,7 +157,7 @@ async fn js_transport_post(
   let raw = lib_js_transport_post(
     transport_id,
     url,
-    js_transport_bytes_to_fixedarray(body),
+    body,
     header_names,
     header_values,
   ).wait() catch {
