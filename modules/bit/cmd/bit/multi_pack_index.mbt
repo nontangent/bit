@@ -38,7 +38,6 @@ async fn handle_multi_pack_index(args : Array[String]) -> Unit raise Error {
       "--no-progress" => progress = false
       "--batch-size" if i + 1 < args.length() => {
         batch_size = @string.parse_int(args[i + 1]) catch {
-          err if @async.is_cancellation_error(err) => raise err
           _ => 0
         }
         i += 2
@@ -46,7 +45,6 @@ async fn handle_multi_pack_index(args : Array[String]) -> Unit raise Error {
       }
       _ if arg.has_prefix("--batch-size=") =>
         batch_size = @string.parse_int(arg[13:].to_owned()) catch {
-          err if @async.is_cancellation_error(err) => raise err
           _ => 0
         }
       "--preferred-pack" if i + 1 < args.length() => {
@@ -758,15 +756,12 @@ async fn midx_expire(
     let idx_path = pack_dir + "/" + pack_stem + ".idx"
     let rev_path = pack_dir + "/" + pack_stem + ".rev"
     fs.remove_file(pack_path) catch {
-      err if @async.is_cancellation_error(err) => raise err
       _ => ()
     }
     fs.remove_file(idx_path) catch {
-      err if @async.is_cancellation_error(err) => raise err
       _ => ()
     }
     fs.remove_file(rev_path) catch {
-      err if @async.is_cancellation_error(err) => raise err
       _ => ()
     }
     expired += 1
@@ -876,7 +871,6 @@ async fn midx_repack(
   let objects_dir = parent_dir(pack_dir)
   let git_dir = parent_dir(objects_dir)
   let db = @bitlib.ObjectDb::load(fs, git_dir) catch {
-    err if @async.is_cancellation_error(err) => raise err
     _ => {
       if progress {
         eprint_line("Unable to load object database")
@@ -1292,7 +1286,6 @@ async fn midx_write_bitmap(
   let object_type_by_midx_pos : Array[Int] = Array::make(object_count, -1)
   for pack_idx, pack_name in pack_files {
     let pack_data = fs.read_file(pack_dir + "/" + pack_name) catch {
-      err if @async.is_cancellation_error(err) => raise err
       _ => {
         eprint_line("could not load pack")
         @sys.exit(1)
@@ -1623,7 +1616,7 @@ fn midx_parse_config_bool(value : String) -> Bool? {
 
 ///|
 fn midx_emit_lookup_table_trace(fs : OsFs) -> Unit {
-  match @sys.get_env_var("GIT_TRACE2_EVENT") {
+  match @env.get_env_var("GIT_TRACE2_EVENT") {
     Some(path) => {
       let target = path.trim().to_owned()
       if target.length() == 0 || target == "1" || target == "2" {
@@ -2690,7 +2683,7 @@ fn midx_write_rev_file(
 
 ///|
 fn midx_should_write_rev() -> Bool {
-  match @sys.get_env_var("GIT_TEST_MIDX_WRITE_REV") {
+  match @env.get_env_var("GIT_TEST_MIDX_WRITE_REV") {
     Some(value) => {
       let v = value.trim().to_owned()
       v == "1" || v.to_lower() == "true"

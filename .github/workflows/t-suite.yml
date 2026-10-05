@@ -1,0 +1,60 @@
+name: t Suite
+
+# The t/ integration tests had no CI job at all: ci.yml's `select` skips its
+# jobs for a diff that only touches t/, and nothing invoked the task that runs
+# them. That blind spot let t9014, t90010 and a t9007 assertion sit broken for
+# months. This workflow is deliberately ungated — it runs on every pull
+# request, like js-build.yml — so the suite cannot go dark again.
+#
+# It runs the whole t/ tree, not one range: t0xxx went uncovered for the same
+# structural reason t9 did, and a filter here is exactly how that happens.
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  t-suite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      # t9020 and t9021 stand up a smart HTTP server with tools/http-test-server.js.
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - name: Install pkfire
+        uses: mizchi/pkfire@v0.12.1
+        with:
+          version: 0.12.1
+      - name: Install pkspec
+        uses: mizchi/pkspec@v0.4.1
+        with:
+          version: 0.4.1
+          pkl-version: none
+
+      - name: Install MoonBit CLI
+        uses: ./.github/actions/setup-moonbit
+
+      - name: Moon update
+        run: moon update
+
+      # No `git config --global user.name/user.email` step: t/test-lib.sh and
+      # t/test-lib-e2e.sh each point HOME at their own trash directory and
+      # establish an identity of their own, so the suite no longer depends on
+      # the runner's git configuration.
+
+      # Builds the release binary at the path the test libs look for, via the
+      # test-t task's build dependency.
+      - name: Run t/ suite
+        run: pkf run test-t

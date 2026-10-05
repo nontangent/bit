@@ -4,7 +4,7 @@
 ///|
 /// Bytes を String に変換（ASCII/UTF-8 として解釈）
 fn bytes_to_string(data : Bytes) -> String {
-  let result = StringBuilder::new()
+  let result = StringBuilder()
   for b in data {
     result.write_char(b.to_int().unsafe_to_char())
   }
@@ -24,7 +24,7 @@ fn trim_newlines(s : String) -> String {
       break
     }
   }
-  let result = StringBuilder::new()
+  let result = StringBuilder()
   for i in 0..<end {
     result.write_char(chars[i])
   }
@@ -38,7 +38,7 @@ fn skip_chars(s : String, n : Int) -> String {
   if n >= chars.length() {
     return ""
   }
-  let result = StringBuilder::new()
+  let result = StringBuilder()
   for i in n..<chars.length() {
     result.write_char(chars[i])
   }
@@ -63,7 +63,7 @@ fn normalize_subdir_path(path : String) -> String {
     end -= 1
   }
   // 結果を構築
-  let result = StringBuilder::new()
+  let result = StringBuilder()
   for i in start..<end {
     result.write_char(chars[i])
   }
@@ -77,12 +77,12 @@ fn split_path(path : String) -> Array[String] {
     return []
   }
   let parts : Array[String] = []
-  let mut current = StringBuilder::new()
+  let mut current = StringBuilder()
   for c in path {
     if c == '/' {
       if current.to_string().length() > 0 {
         parts.push(current.to_string())
-        current = StringBuilder::new()
+        current = StringBuilder()
       }
     } else {
       current.write_char(c)
@@ -171,9 +171,7 @@ pub fn SubdirRepo::from_commit(
     _ => raise IoError("failed to load object db")
   }
   // サブディレクトリのツリーを抽出
-  let tree_id = extract_subdir_tree(db, rfs, commit_id, normalized_path) catch {
-    e => raise e
-  }
+  let tree_id = extract_subdir_tree(db, rfs, commit_id, normalized_path)
   // サブディレクトリのツリーをベースとした Fs を作成
   let bitfs = @fs.Fs::from_tree(git_dir, tree_id)
   {
@@ -213,9 +211,7 @@ pub fn SubdirRepo::from_head(
       _ => raise IoError("invalid commit id in HEAD")
     }
   }
-  SubdirRepo::from_commit(rfs, git_dir, head_id, subdir_path, config~) catch {
-    e => raise e
-  }
+  SubdirRepo::from_commit(rfs, git_dir, head_id, subdir_path, config~)
 }
 
 ///|
@@ -237,9 +233,7 @@ pub fn SubdirRepo::from_branch(
   ) catch {
     _ => raise IoError("invalid commit id in branch ref")
   }
-  SubdirRepo::from_commit(rfs, git_dir, commit_id, subdir_path, config~) catch {
-    e => raise e
-  }
+  SubdirRepo::from_commit(rfs, git_dir, commit_id, subdir_path, config~)
 }
 
 ///|

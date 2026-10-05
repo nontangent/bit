@@ -188,7 +188,7 @@ pub fn parse_refs(
       continue
     }
     let chars = line.to_array()
-    let sha_str = StringBuilder::new()
+    let sha_str = StringBuilder()
     for i in 0..<40 {
       sha_str.write_char(chars[i])
     }
@@ -199,7 +199,7 @@ pub fn parse_refs(
     }
 
     // Read refname until null or newline
-    let refname = StringBuilder::new()
+    let refname = StringBuilder()
     for i = 41; i < chars.length(); i = i + 1 {
       if chars[i] == '\u0000' || chars[i] == '\n' {
         break
@@ -214,7 +214,7 @@ pub fn parse_refs(
 
 ///|
 fn pkt_bytes_to_string(data : Bytes) -> String {
-  let result = StringBuilder::new()
+  let result = StringBuilder()
   for b in data {
     result.write_char(b.to_int().unsafe_to_char())
   }

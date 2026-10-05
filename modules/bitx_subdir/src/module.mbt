@@ -79,13 +79,9 @@ pub fn init_module(
     _ => ()
   }
   // 7. filter driver スクリプトを作成
-  setup_filter_script(fs, rfs, git_dir, normalized_path) catch {
-    e => raise e
-  }
+  setup_filter_script(fs, rfs, git_dir, normalized_path)
   // 8. .gitattributes に filter パターンを追加
-  setup_gitattributes_filter(fs, rfs, repo_root, normalized_path) catch {
-    e => raise e
-  }
+  setup_gitattributes_filter(fs, rfs, repo_root, normalized_path)
   ignore(head_commit_id)
 }
 
@@ -121,9 +117,7 @@ fn setup_filter_script(
   // .git/config に filter 設定を追加
   setup_filter_config(
     fs, rfs, git_dir, filter_name, clean_script, smudge_script,
-  ) catch {
-    e => raise e
-  }
+  )
 }
 
 ///|
@@ -270,7 +264,7 @@ fn remove_precommit_hook(
 ///|
 /// hook からセクションを削除
 fn remove_hook_section(content : String, marker : String) -> String {
-  let result = StringBuilder::new()
+  let result = StringBuilder()
   let mut in_section = false
   for line_view in content.split("\n") {
     let line = line_view.to_owned()
@@ -307,13 +301,9 @@ fn _setup_filter_driver(
 ) -> Unit raise SubdirError {
   let filter_name = "moongit-subdir-" + path_to_module_name(subdir_path)
   // 1. .git/config に filter を追加
-  add_filter_to_config(fs, rfs, git_dir, filter_name, subdir_path) catch {
-    e => raise e
-  }
+  add_filter_to_config(fs, rfs, git_dir, filter_name, subdir_path)
   // 2. .gitattributes にパターンを追加
-  add_filter_to_gitattributes(fs, rfs, repo_root, filter_name, subdir_path) catch {
-    e => raise e
-  }
+  add_filter_to_gitattributes(fs, rfs, repo_root, filter_name, subdir_path)
 }
 
 ///|
@@ -337,7 +327,7 @@ fn add_filter_to_config(
     return ()
   }
   // filter セクションを追加
-  let filter_section = StringBuilder::new()
+  let filter_section = StringBuilder()
   if config.length() > 0 && !config.has_suffix("\n") {
     filter_section.write_string("\n")
   }
@@ -463,7 +453,7 @@ fn remove_filter_from_config(
 ///|
 /// config からセクションを削除
 fn remove_config_section(content : String, section_name : String) -> String {
-  let result = StringBuilder::new()
+  let result = StringBuilder()
   let section_header = "[" + section_name + "]"
   let mut in_section = false
   let mut prev_was_empty = false
@@ -545,7 +535,7 @@ fn remove_filter_from_gitattributes(
     return ()
   }
   // パターンとコメントを削除
-  let result = StringBuilder::new()
+  let result = StringBuilder()
   for line_view in content.split("\n") {
     let line = line_view.to_owned()
     if line == pattern_line || line == comment_line {
@@ -614,7 +604,7 @@ fn _add_to_gitmodules(
     return ()
   }
   // 新しいエントリを追加
-  let entry = StringBuilder::new()
+  let entry = StringBuilder()
   if content.length() > 0 && !content.has_suffix("\n") {
     entry.write_string("\n")
   }
@@ -669,7 +659,7 @@ fn _remove_from_gitmodules(
 ///|
 /// .gitmodules からセクションを削除
 fn remove_gitmodules_section(content : String, subdir_path : String) -> String {
-  let result = StringBuilder::new()
+  let result = StringBuilder()
   let section_header = "[submodule \"" + subdir_path + "\"]"
   let mut in_section = false
   for line_view in content.split("\n") {
@@ -865,7 +855,7 @@ pub fn list_modules(
 ///|
 /// パスをモジュール名に変換（/ を _ に）
 fn path_to_module_name(path : String) -> String {
-  let result = StringBuilder::new()
+  let result = StringBuilder()
   for c in path {
     if c == '/' {
       result.write_char('_')
@@ -879,7 +869,7 @@ fn path_to_module_name(path : String) -> String {
 ///|
 /// モジュール名をパスに戻す（_ を / に）
 fn module_name_to_path(name : String) -> String {
-  let result = StringBuilder::new()
+  let result = StringBuilder()
   for c in name {
     if c == '_' {
       result.write_char('/')
@@ -905,7 +895,7 @@ fn count_path_depth(path : String) -> Int {
 ///|
 /// 相対パスを構築（../ を depth 回）
 fn _build_relative_path(depth : Int, subdir_path : String) -> String {
-  let result = StringBuilder::new()
+  let result = StringBuilder()
   for _ in 0..<depth {
     result.write_string("../")
   }
@@ -916,7 +906,7 @@ fn _build_relative_path(depth : Int, subdir_path : String) -> String {
 ///|
 /// gitdir パスを構築
 fn build_gitdir_path(depth : Int, module_name : String) -> String {
-  let result = StringBuilder::new()
+  let result = StringBuilder()
   for _ in 0..<depth {
     result.write_string("../")
   }
@@ -928,7 +918,7 @@ fn build_gitdir_path(depth : Int, module_name : String) -> String {
 ///|
 /// モジュール用 config を生成
 fn build_module_config(worktree_path : String, subdir_path : String) -> String {
-  let config = StringBuilder::new()
+  let config = StringBuilder()
   config.write_string("[core]\n")
   config.write_string("\trepositoryformatversion = 0\n")
   config.write_string("\tfilemode = true\n")
@@ -986,7 +976,7 @@ fn string_to_bytes_mod(s : String) -> Bytes {
 
 ///|
 fn bytes_to_string_mod(bytes : Bytes) -> String {
-  let result = StringBuilder::new()
+  let result = StringBuilder()
   for i in 0..<bytes.length() {
     result.write_char(bytes[i].to_int().unsafe_to_char())
   }

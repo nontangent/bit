@@ -1,13 +1,13 @@
 name = "mizchi/bit_osfs"
 
-version = "0.46.4"
+version = "0.48.0"
 
 import {
-  "mizchi/bit_core@0.46.4",
-  "mizchi/bit_io@0.46.4",
-  "mizchi/bit_object@0.46.4",
-  "mizchi/bit_types@0.46.4",
-  "moonbitlang/x@0.4.40",
+  "mizchi/bit_core@0.48.0",
+  "mizchi/bit_io@0.48.0",
+  "mizchi/bit_object@0.48.0",
+  "mizchi/bit_types@0.48.0",
+  "moonbitlang/x@0.5.5",
 }
 
 repository = "https://github.com/mizchi/bit-vcs"

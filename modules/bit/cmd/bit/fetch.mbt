@@ -1,7 +1,7 @@
 ///|
 fn collect_global_config_overrides_for_delegate() -> Array[String] {
   let overrides : Array[String] = []
-  match @sys.get_env_var("GIT_CONFIG_OVERRIDES") {
+  match @env.get_env_var("GIT_CONFIG_OVERRIDES") {
     Some(encoded) =>
       for line_view in encoded.split("\n") {
         let line = line_view.to_owned()
@@ -19,10 +19,10 @@ fn collect_global_config_overrides_for_delegate() -> Array[String] {
 ///|
 fn collect_global_path_overrides_for_delegate() -> Array[String] {
   let overrides : Array[String] = []
-  let delegate_cwd = match @sys.get_env_var("GIT_SHIM_CWD") {
+  let delegate_cwd = match @env.get_env_var("GIT_SHIM_CWD") {
     Some(dir) if dir.length() > 0 => Some(dir)
     _ =>
-      match @sys.get_env_var("GIT_SHIM_PWD") {
+      match @env.get_env_var("GIT_SHIM_PWD") {
         Some(dir) if dir.length() > 0 => Some(dir)
         _ => None
       }
@@ -34,12 +34,12 @@ fn collect_global_path_overrides_for_delegate() -> Array[String] {
     }
     None => ()
   }
-  let explicit_git_dir = match @sys.get_env_var("GIT_SHIM_EXPLICIT_GIT_DIR") {
+  let explicit_git_dir = match @env.get_env_var("GIT_SHIM_EXPLICIT_GIT_DIR") {
     Some(value) => value == "1"
     None => false
   }
   if explicit_git_dir {
-    match @sys.get_env_var("GIT_DIR") {
+    match @env.get_env_var("GIT_DIR") {
       Some(dir) if dir.length() > 0 => overrides.push("--git-dir=" + dir)
       _ => ()
     }
@@ -192,7 +192,7 @@ async fn handle_fetch(args : Array[String]) -> Unit raise Error {
     if arg == "--depth" && i + 1 < args.length() {
       depth = @string.parse_int(args[i + 1]) catch {
         err => {
-          if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+          if @async.is_being_cancelled() {
             raise err
           }
           0
@@ -205,7 +205,7 @@ async fn handle_fetch(args : Array[String]) -> Unit raise Error {
       let depth_str = String::unsafe_substring(arg, start=8, end=arg.length())
       depth = @string.parse_int(depth_str) catch {
         err => {
-          if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+          if @async.is_being_cancelled() {
             raise err
           }
           0
@@ -371,7 +371,7 @@ async fn handle_fetch(args : Array[String]) -> Unit raise Error {
   } else if !explicit_filter_flag && inherited_filter.is_partial() {
     filter = inherited_filter
   }
-  let local_root = match @sys.get_env_var("GIT_SHIM_CWD") {
+  let local_root = match @env.get_env_var("GIT_SHIM_CWD") {
     Some(dir) => dir
     None => root
   }
@@ -441,12 +441,12 @@ fn fetch_normalize_optional_value(value : String?) -> String? {
 
 ///|
 fn fetch_relay_preferred_sender() -> String? {
-  fetch_normalize_optional_value(@sys.get_env_var("BIT_RELAY_FETCH_SENDER"))
+  fetch_normalize_optional_value(@env.get_env_var("BIT_RELAY_FETCH_SENDER"))
 }
 
 ///|
 fn fetch_relay_preferred_repo() -> String? {
-  fetch_normalize_optional_value(@sys.get_env_var("BIT_RELAY_FETCH_REPO"))
+  fetch_normalize_optional_value(@env.get_env_var("BIT_RELAY_FETCH_REPO"))
 }
 
 ///|

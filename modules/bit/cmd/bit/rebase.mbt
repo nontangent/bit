@@ -442,7 +442,7 @@ async fn handle_rebase(args : Array[String]) -> Unit raise Error {
   check_and_exit_unsupported_attrs(root)
   let wfs : &@bitcore.FileSystem = fs
   let rfs : &@bitcore.RepoFileSystem = fs
-  let filter_cmd = @bitlib.FilterCmd::{ run: @bitlibnative.run_filter_command }
+  let filter_cmd = @bitlib.FilterCmd::{ run: @bitlibnative.run_filter_command, }
   // Parse arguments
   let mut do_continue = false
   let mut do_abort = false
@@ -550,7 +550,7 @@ async fn handle_rebase(args : Array[String]) -> Unit raise Error {
         let stopped_path = git_dir + "/rebase-merge/stopped-sha"
         if rfs.is_file(stopped_path) {
           let hex = trim_string(decode_bytes(rfs.read_file(stopped_path)))
-          if @sys.get_env_var("GIT_TRACE") is Some(v) && v != "" && v != "0" {
+          if @env.get_env_var("GIT_TRACE") is Some(v) && v != "" && v != "0" {
             let backend_path = git_dir + "/rebase-merge/backend"
             let use_apply = rfs.is_file(backend_path) &&
               trim_string(decode_bytes(rfs.read_file(backend_path))) == "apply"
@@ -734,9 +734,7 @@ async fn handle_rebase(args : Array[String]) -> Unit raise Error {
   }
   // Check if this is a subdir-clone and handle specially
   if is_subdir_clone(fs, git_dir) {
-    handle_subdir_rebase(fs, root, git_dir, upstream) catch {
-      e => raise e
-    }
+    handle_subdir_rebase(fs, root, git_dir, upstream)
     return
   }
   // Handle --quit: drop rebase state without restoring the original branch
@@ -789,7 +787,12 @@ async fn handle_rebase(args : Array[String]) -> Unit raise Error {
       print_interactive_rebase_result(result, quiet~)
     } else {
       let state_before = @bitlib.load_rebase_state(rfs, git_dir)
-      let result = @bitlib.rebase_continue(fs, fs, root, run_filter_cmd=filter_cmd)
+      let result = @bitlib.rebase_continue(
+        fs,
+        fs,
+        root,
+        run_filter_cmd=filter_cmd,
+      )
       let signed_id = if should_sign {
         match state_before {
           Some(state) =>
@@ -1090,7 +1093,13 @@ async fn handle_rebase(args : Array[String]) -> Unit raise Error {
         (
           oid,
           @bitlib.rebase_start_with_onto(
-            fs, fs, root, oid, id, force_rebase~, run_filter_cmd=filter_cmd,
+            fs,
+            fs,
+            root,
+            oid,
+            id,
+            force_rebase~,
+            run_filter_cmd=filter_cmd,
           ),
         )
       }
@@ -1112,7 +1121,12 @@ async fn handle_rebase(args : Array[String]) -> Unit raise Error {
         (
           id,
           @bitlib.rebase_start_with_onto(
-            fs, fs, root, id, exclude_from, force_rebase~,
+            fs,
+            fs,
+            root,
+            id,
+            exclude_from,
+            force_rebase~,
             run_filter_cmd=filter_cmd,
           ),
         )
@@ -1121,7 +1135,11 @@ async fn handle_rebase(args : Array[String]) -> Unit raise Error {
     if result.status is @bitlib.RebaseStatus::Conflict {
       wfs.write_string(
         git_dir + "/rebase-merge/backend",
-        if use_apply_backend { "apply" } else { "merge" },
+        if use_apply_backend {
+          "apply"
+        } else {
+          "merge"
+        },
       ) catch {
         _ => ()
       }
@@ -1191,14 +1209,26 @@ async fn rebase_copy_notes_after_rewrite(
   for notes_ref in target_refs {
     for pair in rewritten {
       let (old_id, new_id) = pair
-      if rebase_note_exists(rfs, git_dir, common_git_dir, notes_ref, old_id.to_hex()) {
+      if rebase_note_exists(
+          rfs,
+          git_dir,
+          common_git_dir,
+          notes_ref,
+          old_id.to_hex(),
+        ) {
         // force=true: internal rewrite copying (unlike `git notes copy`) is
         // not asking the user to confirm, and a rebase can deterministically
         // reproduce the same new commit id it produced last time (e.g. when
         // replaying the exact same commit onto the exact same base again),
         // in which case the destination note already legitimately exists.
         notes_copy(
-          wfs, rfs, git_dir, common_git_dir, notes_ref, old_id.to_hex(), new_id.to_hex(),
+          wfs,
+          rfs,
+          git_dir,
+          common_git_dir,
+          notes_ref,
+          old_id.to_hex(),
+          new_id.to_hex(),
           true,
         )
       }
@@ -1575,7 +1605,7 @@ fn generate_rebase_todo(
   rfs : &@bitcore.RepoFileSystem,
   commits : Array[@bitcore.ObjectId],
 ) -> String raise Error {
-  let sb = StringBuilder::new()
+  let sb = StringBuilder()
   for commit in commits {
     let full_hex = commit.to_hex()
     let obj = db.get(rfs, commit)
@@ -1804,7 +1834,7 @@ fn parse_rebase_todo(content : String) -> Array[RebaseTodoEntry] {
 ///|
 fn split_whitespace(s : String, max_parts : Int) -> Array[String] {
   let result : Array[String] = []
-  let current = StringBuilder::new()
+  let current = StringBuilder()
   let mut in_word = false
   for c in s {
     if c == ' ' || c == '\t' {
@@ -1976,7 +2006,7 @@ async fn cherry_pick_commit(
   )
   let short = String::unsafe_substring(new_commit_id.to_hex(), start=0, end=7)
   print_line("[\{short}] \{get_first_line(message)}")
-  { has_conflict: false }
+  { has_conflict: false, }
 }
 
 ///|
@@ -2159,7 +2189,7 @@ async fn handle_subdir_rebase(
   let upstream_path = git_dir + "/refs/remotes/" + target_ref
   let upstream_bytes = fs.read_file(upstream_path) catch {
     err => {
-      if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+      if @async.is_being_cancelled() {
         raise err
       }
       print_line("Error: cannot resolve ref: \{target_ref}")
@@ -2176,9 +2206,7 @@ async fn handle_subdir_rebase(
   let db = @bitlib.ObjectDb::load_lazy(fs, git_dir)
   let commits = find_subdir_affecting_commits(
     db, fs, base_hex, upstream_hex, subdir_path,
-  ) catch {
-    err => raise err
-  }
+  )
   if commits.length() == 0 {
     print_line("Already up to date. No changes to \{subdir_path}.")
     update_subdir_base(fs, git_dir, upstream_hex)
@@ -2188,9 +2216,7 @@ async fn handle_subdir_rebase(
   // Step 4: Apply each commit
   for commit_info in commits {
     print_line("  Applying: \{commit_info.message}")
-    apply_subdir_change(fs, db, root, git_dir, commit_info) catch {
-      err => raise err
-    }
+    apply_subdir_change(fs, db, root, git_dir, commit_info)
   }
   // Step 5: Update base commit
   update_subdir_base(fs, git_dir, upstream_hex)
@@ -2225,9 +2251,7 @@ fn find_subdir_affecting_commits(
     _ => raise @bitcore.GitError::InvalidObject("Invalid target: " + target_hex)
   }
   // Get base subdir tree
-  let base_subdir = get_commit_subdir_tree(db, fs, base_id, subdir_path) catch {
-    err => raise err
-  }
+  let base_subdir = get_commit_subdir_tree(db, fs, base_id, subdir_path)
   // Walk from target to base, collect commits
   let commits_to_check : Array[@bitcore.ObjectId] = []
   let visited : Map[String, Bool] = Map([])
@@ -2241,7 +2265,7 @@ fn find_subdir_affecting_commits(
     commits_to_check.push(current)
     let obj = db.get(fs, current)
     guard obj is Some(o) else { break }
-    let info = @bitcore.parse_commit(o.data) catch { err => raise err }
+    let info = @bitcore.parse_commit(o.data)
     if info.parents.length() == 0 {
       break
     }
@@ -2276,7 +2300,7 @@ fn find_subdir_affecting_commits(
         continue
       }
       let (author, message) = parse_commit_author_message(o.data)
-      result.push({ id: commit_id, subdir_tree: tree, message, author })
+      result.push({ id: commit_id, subdir_tree: tree, message, author, })
       prev_tree = curr_tree
     }
     i -= 1
@@ -2293,10 +2317,8 @@ fn get_commit_subdir_tree(
 ) -> @bitcore.ObjectId? raise @bitcore.GitError {
   let obj = db.get(fs, commit_id)
   guard obj is Some(o) else { return None }
-  let info = @bitcore.parse_commit(o.data) catch { err => raise err }
-  find_tree_subtree(db, fs, info.tree, subdir_path) catch {
-    err => raise err
-  }
+  let info = @bitcore.parse_commit(o.data)
+  find_tree_subtree(db, fs, info.tree, subdir_path)
 }
 
 ///|
@@ -2317,7 +2339,7 @@ fn find_tree_subtree(
   for part in parts {
     let obj = db.get(fs, current)
     guard obj is Some(o) else { return None }
-    let entries = @bitcore.parse_tree(o.data) catch { err => raise err }
+    let entries = @bitcore.parse_tree(o.data)
     let mut found = false
     for entry in entries {
       if entry.name == part {
@@ -2338,7 +2360,7 @@ fn parse_commit_author_message(content : Bytes) -> (String, String) {
   let text = @utf8.decode_lossy(content[:])
   let mut author = ""
   let mut in_message = false
-  let message = StringBuilder::new()
+  let message = StringBuilder()
   for line_view in text.split("\n") {
     let line = line_view.to_owned()
     if in_message {
@@ -2381,9 +2403,7 @@ fn apply_subdir_change(
     }
   }
   // Write new tree
-  subdir_write_tree(db, fs, info.subdir_tree, worktree) catch {
-    err => raise err
-  }
+  subdir_write_tree(db, fs, info.subdir_tree, worktree)
   // Create commit
   let timestamp = get_current_timestamp()
   let message = info.message + "\n\n(rebased from " + info.id.to_hex() + ")\n"
@@ -2463,16 +2483,14 @@ fn subdir_write_tree(
 ) -> Unit raise @bitcore.GitError {
   let obj = db.get(fs, tree_id)
   guard obj is Some(o) else { return }
-  let entries = @bitcore.parse_tree(o.data) catch { err => raise err }
+  let entries = @bitcore.parse_tree(o.data)
   for entry in entries {
     let path = dir + "/" + entry.name
     if entry.mode == "40000" || entry.mode == "040000" {
       fs.mkdir_p(path) catch {
         _ => ()
       }
-      subdir_write_tree(db, fs, entry.id, path) catch {
-        err => raise err
-      }
+      subdir_write_tree(db, fs, entry.id, path)
     } else {
       let blob = db.get(fs, entry.id)
       guard blob is Some(b) else { continue }
@@ -2485,7 +2503,7 @@ fn subdir_write_tree(
 
 ///|
 fn subdir_bytes_to_string(bytes : Bytes) -> String {
-  let result = StringBuilder::new()
+  let result = StringBuilder()
   for i in 0..<bytes.length() {
     result.write_char(bytes[i].to_int().unsafe_to_char())
   }

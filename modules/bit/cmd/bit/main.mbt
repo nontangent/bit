@@ -53,6 +53,7 @@ async fn show_help() -> Unit {
     #|
     #|relay
     #|   relay        Relay-based repository sharing (serve, sync)
+    #|   serve        Serve repositories over the Git smart HTTP protocol
     #|
     #|collaboration
     #|   pr           Manage pull requests
@@ -511,7 +512,7 @@ fn show_command_help_specs() -> Array[(String, String, String)] {
 
 ///|
 fn help_text_opt_in_enabled() -> Bool {
-  match @sys.get_env_var("BIT_HELP_FULL") {
+  match @env.get_env_var("BIT_HELP_FULL") {
     Some(value) => {
       let normalized = value.to_lower()
       normalized == "1" || normalized == "true" || normalized == "yes"
@@ -522,7 +523,7 @@ fn help_text_opt_in_enabled() -> Bool {
 
 ///|
 fn help_text_external_dir() -> String? {
-  match @sys.get_env_var("BIT_HELP_TEXT_DIR") {
+  match @env.get_env_var("BIT_HELP_TEXT_DIR") {
     Some(value) => if value.length() > 0 { Some(value) } else { None }
     None => None
   }
@@ -607,6 +608,12 @@ async fn show_command_help(cmd : String, silent? : Bool = false) -> Bool {
     "relay" => {
       if !silent {
         print_relay_usage()
+      }
+      true
+    }
+    "serve" => {
+      if !silent {
+        print_serve_usage()
       }
       true
     }
@@ -751,7 +758,7 @@ async fn run_main_for_args(args : Array[String]) -> Unit {
   // to a real git binary instead of silently falling back.
   for arg in args {
     if arg == "--no-git-fallback" {
-      @sys.set_env_var("BIT_NO_GIT_FALLBACK", "1")
+      @env.set_env_var("BIT_NO_GIT_FALLBACK", "1")
       break
     }
   }
@@ -769,13 +776,13 @@ async fn run_main_for_args(args : Array[String]) -> Unit {
   }
   match opts.git_dir {
     Some(dir) => {
-      @sys.set_env_var("GIT_DIR", dir)
-      @sys.set_env_var("GIT_SHIM_EXPLICIT_GIT_DIR", "1")
+      @env.set_env_var("GIT_DIR", dir)
+      @env.set_env_var("GIT_SHIM_EXPLICIT_GIT_DIR", "1")
     }
-    None => @sys.unset_env_var("GIT_SHIM_EXPLICIT_GIT_DIR")
+    None => @env.unset_env_var("GIT_SHIM_EXPLICIT_GIT_DIR")
   }
   match opts.work_tree {
-    Some(dir) => @sys.set_env_var("GIT_WORK_TREE", dir)
+    Some(dir) => @env.set_env_var("GIT_WORK_TREE", dir)
     None => ()
   }
   // Store config overrides in environment variable for handlers to access
@@ -785,7 +792,7 @@ async fn run_main_for_args(args : Array[String]) -> Unit {
       // Encode as key=value, separated by newlines
       encoded.push(pair.0 + "=" + pair.1)
     }
-    @sys.set_env_var("GIT_CONFIG_OVERRIDES", encoded.join("\n"))
+    @env.set_env_var("GIT_CONFIG_OVERRIDES", encoded.join("\n"))
   }
   let fs = OsFs::new()
   match missing_global_cwd_error(fs, opts.cwd, opts.cwd_raw) {
@@ -798,22 +805,22 @@ async fn run_main_for_args(args : Array[String]) -> Unit {
   // Set working directory if -C was used
   match opts.cwd {
     Some(dir) => {
-      let caller_pwd = match @sys.get_env_var("GIT_SHIM_PWD") {
+      let caller_pwd = match @env.get_env_var("GIT_SHIM_PWD") {
         Some(value) => Some(value)
         None =>
-          match @sys.get_env_var("GIT_SHIM_CWD") {
+          match @env.get_env_var("GIT_SHIM_CWD") {
             Some(value) => Some(value)
-            None => @sys.get_env_var("PWD")
+            None => @env.get_env_var("PWD")
           }
       }
       match caller_pwd {
-        Some(value) => @sys.set_env_var("GIT_SHIM_CALLER_PWD", value)
-        None => @sys.unset_env_var("GIT_SHIM_CALLER_PWD")
+        Some(value) => @env.set_env_var("GIT_SHIM_CALLER_PWD", value)
+        None => @env.unset_env_var("GIT_SHIM_CALLER_PWD")
       }
-      @sys.set_env_var("GIT_SHIM_CWD", dir)
-      @sys.set_env_var("GIT_SHIM_PWD", dir)
+      @env.set_env_var("GIT_SHIM_CWD", dir)
+      @env.set_env_var("GIT_SHIM_PWD", dir)
     }
-    None => @sys.unset_env_var("GIT_SHIM_CALLER_PWD")
+    None => @env.unset_env_var("GIT_SHIM_CALLER_PWD")
   }
   let aliases = load_global_aliases(fs)
   apply_alias_overrides(aliases, opts.config_overrides)
@@ -838,7 +845,7 @@ async fn run_main_for_args(args : Array[String]) -> Unit {
   )
   dispatch_command(dispatch_cmd, dispatch_rest) catch {
     err => {
-      if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+      if @async.is_being_cancelled() {
         raise err
       }
       exit_with_error("dispatch", err)
@@ -886,7 +893,7 @@ fn missing_global_cwd_error(
 /// variable by `run_main_for_args` so per-command handlers can consult it
 /// without threading global options through every dispatch path.
 fn git_fallback_disabled() -> Bool {
-  match @sys.get_env_var("BIT_NO_GIT_FALLBACK") {
+  match @env.get_env_var("BIT_NO_GIT_FALLBACK") {
     Some(value) => value == "1"
     None => false
   }
@@ -905,14 +912,14 @@ async fn exit_no_git_fallback(what : String) -> Unit {
 
 ///|
 fn resolve_real_git_for_dispatch() -> String {
-  match @sys.get_env_var("SHIM_REAL_GIT") {
+  match @env.get_env_var("SHIM_REAL_GIT") {
     Some(path) =>
       if path.length() > 0 {
         path
       } else {
-        @sys.get_env_var("GIT_SHIM_REAL_GIT").unwrap_or("/usr/bin/git")
+        @env.get_env_var("GIT_SHIM_REAL_GIT").unwrap_or("/usr/bin/git")
       }
-    None => @sys.get_env_var("GIT_SHIM_REAL_GIT").unwrap_or("/usr/bin/git")
+    None => @env.get_env_var("GIT_SHIM_REAL_GIT").unwrap_or("/usr/bin/git")
   }
 }
 
@@ -1021,6 +1028,7 @@ fn is_bit_only_command(cmd : String) -> Bool {
     | "pr"
     | "issue"
     | "relay"
+    | "serve"
     | "workspace"
     | "repo"
     | "hq"
@@ -1041,14 +1049,14 @@ fn should_delegate_to_real_git(
     return false
   }
   let has_global_config = has_global_config_injection(args)
-  let has_env_parameters = match @sys.get_env_var("GIT_CONFIG_PARAMETERS") {
+  let has_env_parameters = match @env.get_env_var("GIT_CONFIG_PARAMETERS") {
     Some(v) => v.length() > 0
     None => false
   }
-  let has_env_pairs = @sys.get_env_var("GIT_CONFIG_COUNT") is Some(_)
-  let has_env_pairs_without_count = @sys.get_env_var("GIT_CONFIG_KEY_0")
+  let has_env_pairs = @env.get_env_var("GIT_CONFIG_COUNT") is Some(_)
+  let has_env_pairs_without_count = @env.get_env_var("GIT_CONFIG_KEY_0")
     is Some(_) ||
-    @sys.get_env_var("GIT_CONFIG_VALUE_0") is Some(_)
+    @env.get_env_var("GIT_CONFIG_VALUE_0") is Some(_)
   let has_config_env = has_global_config ||
     has_env_parameters ||
     has_env_pairs ||
@@ -1085,12 +1093,12 @@ fn resolve_global_path(raw : String, cwd : String?) -> String {
   let base_dir = match cwd {
     Some(dir) => Some(dir)
     None =>
-      match @sys.get_env_var("GIT_SHIM_PWD") {
+      match @env.get_env_var("GIT_SHIM_PWD") {
         Some(dir) => Some(dir)
         None =>
           match @env.current_dir() {
             Some(dir) => Some(dir)
-            None => @sys.get_env_var("PWD")
+            None => @env.get_env_var("PWD")
           }
       }
   }
@@ -1237,7 +1245,7 @@ async fn dispatch_command(
   }
   dispatch_known_command(normalized_cmd, rest) catch {
     err => {
-      if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+      if @async.is_being_cancelled() {
         raise err
       }
       exit_with_error(command_error_name(normalized_cmd), err)
@@ -1343,6 +1351,7 @@ async fn dispatch_known_command(
     "subdir-clone" => handle_subdir_clone(rest)
     "hub" => handle_hub(rest)
     "relay" => handle_relay(rest)
+    "serve" => handle_serve(rest)
     "pr" => handle_hub_pr(rest)
     "issue" => handle_hub_issue(rest)
     "debug" => handle_debug(rest)

@@ -158,13 +158,9 @@ pub fn set_module_sparse_patterns(
 ) -> Unit raise SubdirError {
   // sparse checkout が初期化されていなければ初期化
   if !is_module_sparse_enabled(rfs, git_dir, subdir_path) {
-    init_module_sparse(fs, rfs, git_dir, subdir_path) catch {
-      e => raise e
-    }
+    init_module_sparse(fs, rfs, git_dir, subdir_path)
   }
-  write_module_sparse_patterns(fs, git_dir, subdir_path, patterns) catch {
-    e => raise e
-  }
+  write_module_sparse_patterns(fs, git_dir, subdir_path, patterns)
 }
 
 ///|
@@ -178,9 +174,7 @@ pub fn add_module_sparse_patterns(
 ) -> Unit raise SubdirError {
   // sparse checkout が初期化されていなければ初期化
   if !is_module_sparse_enabled(rfs, git_dir, subdir_path) {
-    init_module_sparse(fs, rfs, git_dir, subdir_path) catch {
-      e => raise e
-    }
+    init_module_sparse(fs, rfs, git_dir, subdir_path)
   }
   let existing = read_module_sparse_patterns(rfs, git_dir, subdir_path)
   for p in new_patterns {
@@ -188,9 +182,7 @@ pub fn add_module_sparse_patterns(
       existing.push(p)
     }
   }
-  write_module_sparse_patterns(fs, git_dir, subdir_path, existing) catch {
-    e => raise e
-  }
+  write_module_sparse_patterns(fs, git_dir, subdir_path, existing)
 }
 
 ///|
@@ -404,7 +396,7 @@ fn match_simple_glob(filename : String, pattern : String) -> Bool {
 ///|
 /// sparse checkout パターンファイルの内容を構築
 fn build_sparse_content(patterns : Array[String]) -> String {
-  let result = StringBuilder::new()
+  let result = StringBuilder()
   result.write_string("# Sparse checkout patterns\n")
   for p in patterns {
     result.write_string(p)
@@ -442,7 +434,7 @@ fn sparse_trim(s : String) -> String {
 
 ///|
 fn bytes_to_string_sparse(bytes : Bytes) -> String {
-  let result = StringBuilder::new()
+  let result = StringBuilder()
   for i in 0..<bytes.length() {
     result.write_char(bytes[i].to_int().unsafe_to_char())
   }

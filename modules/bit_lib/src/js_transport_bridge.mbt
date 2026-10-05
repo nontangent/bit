@@ -3,13 +3,14 @@
 ///|
 fn js_transport_headers_to_arrays(
   headers : Map[String, String],
-) -> (Array[String], Array[String]) {
-  let names : Array[String] = []
-  let values : Array[String] = []
-  for entry in headers.to_array() {
+) -> (FixedArray[String], FixedArray[String]) {
+  let entries = headers.to_array()
+  let names = FixedArray::make(entries.length(), "")
+  let values = FixedArray::make(entries.length(), "")
+  for i, entry in entries {
     let (name, value) = entry
-    names.push(name)
-    values.push(value)
+    names[i] = name
+    values[i] = value
   }
   (names, values)
 }
@@ -39,8 +40,8 @@ fn js_transport_parse_response(
 extern "js" fn lib_js_transport_get(
   transport_id : Int,
   url : String,
-  header_names : Array[String],
-  header_values : Array[String],
+  header_names : FixedArray[String],
+  header_values : FixedArray[String],
 ) -> @js_async.Promise[Bytes] =
   #| async (transportId, url, headerNames, headerValues) => {
   #|   const state = globalThis.__bitGitJsTransportState ??= { nextTransportId: 1, transports: new Map() };
@@ -88,8 +89,8 @@ extern "js" fn lib_js_transport_post(
   transport_id : Int,
   url : String,
   body : Bytes,
-  header_names : Array[String],
-  header_values : Array[String],
+  header_names : FixedArray[String],
+  header_values : FixedArray[String],
 ) -> @js_async.Promise[Bytes] =
   #| async (transportId, url, body, headerNames, headerValues) => {
   #|   const state = globalThis.__bitGitJsTransportState ??= { nextTransportId: 1, transports: new Map() };

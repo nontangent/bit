@@ -355,10 +355,7 @@ async fn handle_grep(args : Array[String]) -> Unit raise Error {
           patterns,
           expr_tokens,
           use_expr,
-        ) catch {
-          err if @async.is_cancellation_error(err) => raise err
-          err => raise err
-        }
+        )
         i += 2
       }
       "-f" => raise @bitcore.GitError::InvalidObject("fatal: no pattern given")
@@ -366,10 +363,7 @@ async fn handle_grep(args : Array[String]) -> Unit raise Error {
         let file = String::unsafe_substring(arg, start=2, end=arg.length())
         grep_append_patterns_from_file(
           fs, root, file, patterns, expr_tokens, use_expr,
-        ) catch {
-          err if @async.is_cancellation_error(err) => raise err
-          err => raise err
-        }
+        )
         i += 1
       }
       "--threads" if i + 1 < args.length() => i += 2
@@ -752,7 +746,7 @@ fn grep_limit_file_matches(
     for i in 0..<max_count {
       truncated.push(file_match.matches[i])
     }
-    limited.push({ path: file_match.path, matches: truncated })
+    limited.push({ path: file_match.path, matches: truncated, })
   }
   limited
 }
@@ -792,10 +786,10 @@ fn grep_resolve_pattern_file_path(root : String, file : String) -> String {
 
 ///|
 fn grep_get_invocation_cwd(root : String) -> String {
-  match @sys.get_env_var("GIT_SHIM_CWD") {
+  match @env.get_env_var("GIT_SHIM_CWD") {
     Some(dir) => dir
     None =>
-      match @sys.get_env_var("GIT_SHIM_PWD") {
+      match @env.get_env_var("GIT_SHIM_PWD") {
         Some(dir) => dir
         None => @env.current_dir().unwrap_or(root)
       }
@@ -1132,7 +1126,7 @@ fn grep_colorize_line(
   }
   let ordered = spans.copy()
   ordered.sort_by((a, b) => Int::compare(a.start_column, b.start_column))
-  let out = StringBuilder::new()
+  let out = StringBuilder()
   let mut cursor = 0
   for span in ordered {
     let start = span.start_column - 1
@@ -1180,7 +1174,7 @@ fn grep_build_prefix(
   color_spec : GrepColorSpec,
 ) -> String {
   let sep = sign.to_string()
-  let out = StringBuilder::new()
+  let out = StringBuilder()
   if !show_heading {
     out.write_string(grep_color_wrap(file_path, color_spec.filename))
     out.write_string(grep_color_wrap(sep, color_spec.separator))
@@ -1447,16 +1441,19 @@ fn grep_resolve_function_context_spec(
       )
       match xfuncname {
         Some(pattern) =>
-          { header_pattern: Some(pattern), include_leading_comments: true }
+          { header_pattern: Some(pattern), include_leading_comments: true, }
         None =>
           match funcname {
             Some(pattern) =>
-              { header_pattern: Some(pattern), include_leading_comments: false }
-            None => { header_pattern: None, include_leading_comments: false }
+              {
+                header_pattern: Some(pattern),
+                include_leading_comments: false,
+              }
+            None => { header_pattern: None, include_leading_comments: false, }
           }
       }
     }
-    None => { header_pattern: None, include_leading_comments: false }
+    None => { header_pattern: None, include_leading_comments: false, }
   }
 }
 
@@ -1691,7 +1688,11 @@ async fn grep_print_only_matching(
 ) -> Unit {
   for item in file_match.matches {
     let mut rest = item.line
-    let mut column = item.column
+    // Offset of `rest` within the line. Every match reports its own column
+    // counted from the start of the line, the way git's grep does
+    // (`cno = bol - start + match.rm_so + 1`): adding up the ends of the
+    // preceding matches instead double-counts the gap in front of each one.
+    let mut consumed = 0
     while rest != "" {
       let next = @bitgrep.grep_eval_expr(
         rest,
@@ -1712,7 +1713,7 @@ async fn grep_print_only_matching(
       let prefix = grep_build_prefix(
         file_path,
         item.line_number,
-        column,
+        consumed + span.start_column,
         show_line_numbers,
         show_column,
         show_heading,
@@ -1720,10 +1721,10 @@ async fn grep_print_only_matching(
         color_spec,
       )
       print_line(prefix + grep_color_wrap(matched, color_spec.match_selected))
-      column += span.end_column
       if span.end_column >= rest.length() {
         break
       }
+      consumed += span.end_column
       rest = String::unsafe_substring(
         rest,
         start=span.end_column,
@@ -2063,7 +2064,7 @@ fn grep_prefix_file_matches(
   let prefixed : Array[@bitgrep.GrepFileMatch] = []
   for item in matches {
     let path = if item.path == "" { prefix } else { prefix + "/" + item.path }
-    prefixed.push({ path, matches: item.matches })
+    prefixed.push({ path, matches: item.matches, })
   }
   prefixed
 }
@@ -2228,7 +2229,7 @@ fn grep_split_path_segments(path : String) -> Array[String] {
 
 ///|
 fn grep_join_path_segments(parts : Array[String]) -> String {
-  let out = StringBuilder::new()
+  let out = StringBuilder()
   for i in 0..<parts.length() {
     if i > 0 {
       out.write_char('/')

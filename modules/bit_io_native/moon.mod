@@ -1,17 +1,18 @@
 name = "mizchi/bit_io_native"
 
-version = "0.46.4"
+version = "0.48.0"
 
 import {
-  "mizchi/bit_core@0.46.4",
-  "mizchi/bit_io@0.46.4",
-  "mizchi/bit_object@0.46.4",
-  "mizchi/bit_pack@0.46.4",
-  "mizchi/bit_protocol@0.46.4",
-  "mizchi/bit_repo@0.46.4",
-  "mizchi/bit_types@0.46.4",
-  "moonbitlang/async@0.19.4",
-  "moonbitlang/x@0.4.40",
+  "mizchi/bit_core@0.48.0",
+  "mizchi/bit_io@0.48.0",
+  "mizchi/bit_object@0.48.0",
+  "mizchi/bit_objstore@0.48.0",
+  "mizchi/bit_pack@0.48.0",
+  "mizchi/bit_protocol@0.48.0",
+  "mizchi/bit_repo@0.48.0",
+  "mizchi/bit_types@0.48.0",
+  "moonbitlang/async@0.22.1",
+  "moonbitlang/x@0.5.5",
 }
 
 readme = "README.mbt.md"

@@ -1,15 +1,15 @@
 name = "mizchi/bit_pack_ops"
 
-version = "0.46.4"
+version = "0.48.0"
 
 import {
-  "mizchi/bit_core@0.46.4",
-  "mizchi/bit_io@0.46.4",
-  "mizchi/bit_lib@0.46.4",
-  "mizchi/bit_object@0.46.4",
-  "mizchi/bit_pack@0.46.4",
-  "mizchi/bit_types@0.46.4",
-  "moonbitlang/async@0.19.4",
+  "mizchi/bit_core@0.48.0",
+  "mizchi/bit_io@0.48.0",
+  "mizchi/bit_lib@0.48.0",
+  "mizchi/bit_object@0.48.0",
+  "mizchi/bit_pack@0.48.0",
+  "mizchi/bit_types@0.48.0",
+  "moonbitlang/async@0.22.1",
 }
 
 repository = "https://github.com/mizchi/bit-vcs"

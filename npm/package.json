@@ -1,6 +1,6 @@
 {
   "name": "@mizchi/bit",
-  "version": "0.46.4",
+  "version": "0.48.0",
   "description": "Pure MoonBit Git implementation (JS target)",
   "type": "module",
   "sideEffects": false,
@@ -15,7 +15,7 @@
       "default": "./lib.js"
     },
     "./bit.js": "./bit.js",
-    "./bit.cjs": "./bit.cjs",
+    "./bit.mjs": "./bit.mjs",
     "./package.json": "./package.json"
   },
   "publishConfig": {
@@ -27,7 +27,7 @@
   "files": [
     "bin/",
     "bit.js",
-    "bit.cjs",
+    "bit.mjs",
     "lib.js",
     "lib.d.ts",
     "lib.raw.js",

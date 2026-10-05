@@ -110,19 +110,19 @@ local syncNpmLibRaw: Task = new {
   outputs { "npm/lib.raw.js" }
 }
 
-local syncNpmBitCjs: Task = new {
-  name = "sync-npm-bit-cjs"
-  description = "Copy the JS CLI payload into the checked-in npm wrapper"
-  cmd = "cp _build/js/release/build/mizchi/bit/bit.js npm/bit.cjs"
+local syncNpmBitMjs: Task = new {
+  name = "sync-npm-bit-mjs"
+  description = "Copy the JS CLI payload (ES module) into the checked-in npm wrapper"
+  cmd = "cp _build/js/release/build/mizchi/bit/bit.js npm/bit.mjs"
   deps { buildJsCli }
   inputs { "_build/js/release/build/mizchi/bit/bit.js" }
-  outputs { "npm/bit.cjs" }
+  outputs { "npm/bit.mjs" }
 }
 
 local buildNpm: Task = new {
   name = "build-npm"
   description = "Build the JS lib + CLI and stage them into npm/ for publish"
-  deps { syncNpmLibRaw; syncNpmBitCjs }
+  deps { syncNpmLibRaw; syncNpmBitMjs }
 }
 
 local bundleJsLibMinimal: Task = new {
@@ -295,7 +295,7 @@ local test: Task = new {
   deps {
     build
     syncNpmLibRaw
-    syncNpmBitCjs
+    syncNpmBitMjs
     bundleJsLibMinimal
     bundleJsLibGitOps
   }
@@ -313,10 +313,10 @@ local testUpdate: Task = new {
 local testJsBuild: Task = new {
   name = "test-js-build"
   description = "Node-side smoke tests for the published JS lib + npm wrapper"
-  cmd = "node --test tools/js-build.test.mjs tools/npm-lib.test.mjs tools/npm-cli.test.mjs tools/demo-relay.test.mjs tools/demo-editor-link.test.mjs tools/playground-commands.test.mjs tools/playground-view.test.mjs tools/flaker-affected-rules.test.mjs tools/select-affected-tests.test.mjs"
+  cmd = "node --test tools/js-build.test.mjs tools/npm-lib.test.mjs tools/shallow-push.test.mjs tools/npm-cli.test.mjs tools/demo-relay.test.mjs tools/demo-editor-link.test.mjs tools/playground-commands.test.mjs tools/playground-view.test.mjs tools/flaker-affected-rules.test.mjs tools/select-affected-tests.test.mjs"
   deps {
     syncNpmLibRaw
-    syncNpmBitCjs
+    syncNpmBitMjs
     bundleJsLibMinimal
     bundleJsLibGitOps
   }
@@ -330,10 +330,14 @@ local e2e: Task = new {
   cmd = "bash e2e/run-tests.sh"
 }
 
-local testSubdir: Task = new {
-  name = "test-subdir"
-  description = "subdir-clone/push integration tests (t/ directory)"
-  cmd = "bash t/run-tests.sh t900"
+local testT: Task = new {
+  name = "test-t"
+  description = "All t/ integration tests (t0 core, t1/t3/t7, t9 subdir/workspace/transport)"
+  // No filter: every t/ range runs. A filter is how these tests went dark
+  // before — `t900` skipped t9011-t9021, and widening it to `t9` still left
+  // the 30 t0xxx files with no CI job at all.
+  cmd = "bash t/run-tests.sh"
+  deps { build }
 }
 
 local testDistributed: Task = new {
@@ -686,7 +690,7 @@ tasks {
   buildJsLib
   buildJsCli
   syncNpmLibRaw
-  syncNpmBitCjs
+  syncNpmBitMjs
   buildNpm
   bundleJsLibMinimal
   bundleJsLibGitOps
@@ -713,7 +717,7 @@ tasks {
   buildPagesDemo
 
   e2e
-  testSubdir
+  testT
   testDistributed
   testAi
 

@@ -58,9 +58,7 @@ pub fn SubdirRepo::commit(
     parent_info.tree,
     self.subdir_path,
     new_subdir_tree,
-  ) catch {
-    e => raise e
-  }
+  )
   // 新しいコミットを作成
   let new_commit_id = create_commit_object(
     fs,
@@ -70,17 +68,11 @@ pub fn SubdirRepo::commit(
     message,
     author,
     timestamp,
-  ) catch {
-    e => raise e
-  }
+  )
   // HEAD（またはブランチ参照）を更新
-  update_head_ref(fs, rfs, self.git_dir, new_commit_id) catch {
-    e => raise e
-  }
+  update_head_ref(fs, rfs, self.git_dir, new_commit_id)
   // インデックスを新しいコミットに合わせて更新
-  update_index_from_commit(fs, rfs, self.git_dir, new_commit_id) catch {
-    e => raise e
-  }
+  update_index_from_commit(fs, rfs, self.git_dir, new_commit_id)
   // ワーキング層をクリア
   self.bitfs.discard_changes()
   new_commit_id
@@ -154,9 +146,7 @@ fn replace_tree_recursive(
           path_parts,
           depth + 1,
           new_leaf_tree,
-        ) catch {
-          e => raise e
-        }
+        )
         new_entries.push(
           @bit.TreeEntry::new(entry.mode, entry.name, new_child_tree),
         )
@@ -273,7 +263,7 @@ fn write_object(
 /// 文字列から部分文字列を取得
 fn hex_substring(s : String, start : Int, end : Int) -> String {
   let chars = s.to_array()
-  let result = StringBuilder::new()
+  let result = StringBuilder()
   for i = start; i < end && i < chars.length(); i = i + 1 {
     result.write_char(chars[i])
   }
@@ -292,7 +282,7 @@ fn create_commit_object(
   timestamp : Int64,
 ) -> @bit.ObjectId raise SubdirError {
   // コミット内容を構築
-  let content = StringBuilder::new()
+  let content = StringBuilder()
   content.write_string("tree ")
   content.write_string(tree_id.to_hex())
   content.write_string("\n")
@@ -356,7 +346,7 @@ fn update_head_ref(
 
 ///|
 fn bytes_to_string_commit(data : Bytes) -> String {
-  let result = StringBuilder::new()
+  let result = StringBuilder()
   for b in data {
     result.write_char(b.to_int().unsafe_to_char())
   }
@@ -370,7 +360,7 @@ fn trim_head_content(s : String) -> String {
   while end > 0 && (chars[end - 1] == '\n' || chars[end - 1] == '\r') {
     end -= 1
   }
-  let result = StringBuilder::new()
+  let result = StringBuilder()
   for i in 0..<end {
     result.write_char(chars[i])
   }
@@ -383,7 +373,7 @@ fn skip_prefix_commit(s : String, n : Int) -> String {
   if n >= chars.length() {
     return ""
   }
-  let result = StringBuilder::new()
+  let result = StringBuilder()
   for i in n..<chars.length() {
     result.write_char(chars[i])
   }
@@ -402,7 +392,7 @@ fn get_parent_dir(path : String) -> String {
   if last_slash <= 0 {
     return "/"
   }
-  let result = StringBuilder::new()
+  let result = StringBuilder()
   for i in 0..<last_slash {
     result.write_char(chars[i])
   }

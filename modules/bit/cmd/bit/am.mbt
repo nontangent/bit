@@ -72,7 +72,6 @@ async fn handle_am(args : Array[String]) -> Unit raise Error {
     if fs.is_file(next_file) {
       let next = fs.read_file(next_file) |> decode_bytes |> trim_string
       let n = @string.parse_int(next) catch {
-        err if @async.is_cancellation_error(err) => raise err
         _ => 1
       }
       fs.write_string(next_file, (n + 1).to_string())
@@ -278,11 +277,9 @@ async fn apply_remaining_patches(
   let last_str = fs.read_file(am_dir + "/last") |> decode_bytes |> trim_string
   let next_str = fs.read_file(am_dir + "/next") |> decode_bytes |> trim_string
   let last = @string.parse_int(last_str) catch {
-    err if @async.is_cancellation_error(err) => raise err
     _ => 0
   }
   let mut next = @string.parse_int(next_str) catch {
-    err if @async.is_cancellation_error(err) => raise err
     _ => 1
   }
   while next <= last {
@@ -344,11 +341,11 @@ async fn apply_remaining_patches(
     }
     stage_all_changes(fs, root)
     if author.length() > 0 {
-      @sys.set_env_var("GIT_AUTHOR_NAME", extract_name_str(author))
-      @sys.set_env_var("GIT_AUTHOR_EMAIL", extract_email_str(author))
+      @env.set_env_var("GIT_AUTHOR_NAME", extract_name_str(author))
+      @env.set_env_var("GIT_AUTHOR_EMAIL", extract_email_str(author))
     }
     if author_date.length() > 0 {
-      @sys.set_env_var("GIT_AUTHOR_DATE", author_date)
+      @env.set_env_var("GIT_AUTHOR_DATE", author_date)
     }
     let commit_author = get_author_string()
     let commit_timestamp = get_commit_timestamp()

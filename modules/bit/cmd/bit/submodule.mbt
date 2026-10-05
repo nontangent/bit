@@ -75,7 +75,7 @@ async fn show_submodule_usage_stderr() -> Unit raise Error {
 
 ///|
 fn resolve_submodule_root() -> String {
-  match @sys.get_env_var("GIT_SHIM_CWD") {
+  match @env.get_env_var("GIT_SHIM_CWD") {
     Some(dir) =>
       if is_bare_repo_dir(dir) {
         dir
@@ -83,7 +83,7 @@ fn resolve_submodule_root() -> String {
         find_repo_root(dir).unwrap_or(dir)
       }
     None =>
-      match @sys.get_env_var("GIT_SHIM_PWD") {
+      match @env.get_env_var("GIT_SHIM_PWD") {
         Some(dir) =>
           if is_bare_repo_dir(dir) {
             dir
@@ -91,7 +91,7 @@ fn resolve_submodule_root() -> String {
             find_repo_root(dir).unwrap_or(dir)
           }
         None =>
-          match @sys.get_env_var("PWD") {
+          match @env.get_env_var("PWD") {
             Some(dir) =>
               match find_repo_root(dir) {
                 Some(root) => root
@@ -113,14 +113,14 @@ fn resolve_submodule_root() -> String {
 
 ///|
 async fn handle_submodule(args : Array[String]) -> Unit raise Error {
-  let raw_root = match @sys.get_env_var("GIT_WORK_TREE") {
+  let raw_root = match @env.get_env_var("GIT_WORK_TREE") {
     Some(path) => path
     None => resolve_submodule_root()
   }
   let fs = OsFs::new()
   let rfs : &@bitcore.RepoFileSystem = fs
   let root = normalize_path(raw_root)
-  let raw_git_dir = match @sys.get_env_var("GIT_DIR") {
+  let raw_git_dir = match @env.get_env_var("GIT_DIR") {
     Some(path) => path
     None => raw_root + "/.git"
   }
@@ -324,7 +324,7 @@ fn submodule_expand_template_dir(path : String) -> String {
   if !path.has_prefix("~/") {
     return path
   }
-  match @sys.get_env_var("HOME") {
+  match @env.get_env_var("HOME") {
     Some(home) =>
       home + String::unsafe_substring(path, start=1, end=path.length())
     None => path
@@ -333,7 +333,7 @@ fn submodule_expand_template_dir(path : String) -> String {
 
 ///|
 fn submodule_add_template_dir(fs : OsFs) -> String? {
-  match @sys.get_env_var("GIT_TEMPLATE_DIR") {
+  match @env.get_env_var("GIT_TEMPLATE_DIR") {
     Some(path) => Some(submodule_expand_template_dir(path))
     None => {
       let rfs : &@bitcore.RepoFileSystem = fs
@@ -1040,7 +1040,7 @@ async fn handle_submodule_add(
     fs, fs, sub_path, active_sub_git_dir, target_id,
   ) catch {
     err => {
-      if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+      if @async.is_being_cancelled() {
         raise err
       }
       eprint_line(
@@ -1782,12 +1782,12 @@ fn submodule_status_exact_ref_label(
 
 ///|
 fn submodule_cwd_prefix(root : String) -> String {
-  let cwd_abs = match @sys.get_env_var("GIT_SHIM_CWD") {
+  let cwd_abs = match @env.get_env_var("GIT_SHIM_CWD") {
     Some(v) => v
     None =>
-      match @sys.get_env_var("GIT_SHIM_PWD") {
+      match @env.get_env_var("GIT_SHIM_PWD") {
         Some(v) => v
-        None => @sys.get_env_var("PWD").unwrap_or(root)
+        None => @env.get_env_var("PWD").unwrap_or(root)
       }
   }
   let raw_cwd_prefix = rev_parse_show_prefix(root, cwd_abs)
@@ -2075,7 +2075,7 @@ async fn handle_submodule_status(
     let sub_git_dir = @bitlib.resolve_gitdir(rfs, sub_git)
     let head_id = @bitlib.resolve_head_commit(rfs, sub_git_dir) catch {
       err => {
-        if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+        if @async.is_being_cancelled() {
           raise err
         }
         print_line(
@@ -2258,7 +2258,7 @@ async fn handle_submodule_update(
     let _gitfile_content = decode_bytes(
       rfs.read_file(gitfile) catch {
         err => {
-          if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+          if @async.is_being_cancelled() {
             raise err
           }
           Default::default()
@@ -2490,7 +2490,7 @@ async fn handle_submodule_update(
         fs, fs, sub_path, sub_git_dir, target_id,
       ) catch {
         err => {
-          if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+          if @async.is_being_cancelled() {
             raise err
           }
           eprint_line(
@@ -2960,8 +2960,7 @@ async fn handle_submodule_deinit(
         Some(actual_sub_git_dir) if rfs.is_dir(actual_sub_git_dir) => {
           let status = @bitlib.status(rfs, sub_path) catch {
             err => {
-              if @async.is_being_cancelled() ||
-                @async.is_cancellation_error(err) {
+              if @async.is_being_cancelled() {
                 raise err
               }
               @stdio.stderr.write(
@@ -3012,7 +3011,7 @@ async fn handle_submodule_deinit(
     if rfs.is_dir(sub_path) {
       let entries = rfs.readdir(sub_path) catch {
         err => {
-          if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+          if @async.is_being_cancelled() {
             raise err
           }
           continue
@@ -3029,8 +3028,7 @@ async fn handle_submodule_deinit(
         } else {
           wfs.remove_file(full) catch {
             err => {
-              if @async.is_being_cancelled() ||
-                @async.is_cancellation_error(err) {
+              if @async.is_being_cancelled() {
                 raise err
               }
               ()
@@ -3516,7 +3514,7 @@ async fn handle_submodule_foreach(
     let sub_git_dir = @bitlib.resolve_gitdir(rfs, sub_git)
     let head_id = @bitlib.resolve_head_commit(rfs, sub_git_dir) catch {
       err => {
-        if @async.is_being_cancelled() || @async.is_cancellation_error(err) {
+        if @async.is_being_cancelled() {
           raise err
         }
         continue

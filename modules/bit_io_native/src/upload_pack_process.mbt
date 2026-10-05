@@ -43,7 +43,7 @@ fn is_space_char(c : Char) -> Bool {
 ///|
 fn split_shell_words(cmdline : String) -> Array[String] raise @bit.GitError {
   let out : Array[String] = []
-  let current = StringBuilder::new()
+  let current = StringBuilder()
   let mut in_single = false
   let mut in_double = false
   let mut escaped = false
@@ -363,10 +363,10 @@ fn command_looks_like_script(cmd : String) -> Bool {
 
 ///|
 fn read_ssh_variant_override() -> String? {
-  match @sys.get_env_var("GIT_SSH_VARIANT") {
+  match @env.get_env_var("GIT_SSH_VARIANT") {
     Some(value) => Some(value.to_lower())
     None =>
-      match @sys.get_env_var("GIT_CONFIG_OVERRIDES") {
+      match @env.get_env_var("GIT_CONFIG_OVERRIDES") {
         None => None
         Some(overrides) => {
           for line_view in overrides.split("\n") {
@@ -424,7 +424,7 @@ fn resolve_ssh_variant(
 
 ///|
 fn resolve_ssh_command_spec() -> SshCommandSpec raise @bit.GitError {
-  match @sys.get_env_var("GIT_SSH_COMMAND") {
+  match @env.get_env_var("GIT_SSH_COMMAND") {
     Some(cmdline) => {
       let words = split_shell_words(cmdline)
       let cmd = words[0]
@@ -435,7 +435,7 @@ fn resolve_ssh_command_spec() -> SshCommandSpec raise @bit.GitError {
       { cmd, args }
     }
     None =>
-      match @sys.get_env_var("GIT_SSH") {
+      match @env.get_env_var("GIT_SSH") {
         Some(cmd) => { cmd, args: [] }
         None => { cmd: "ssh", args: [] }
       }
@@ -444,7 +444,7 @@ fn resolve_ssh_command_spec() -> SshCommandSpec raise @bit.GitError {
 
 ///|
 fn read_ssh_ip_option() -> String? {
-  match @sys.get_env_var("BIT_SSH_IP_VERSION") {
+  match @env.get_env_var("BIT_SSH_IP_VERSION") {
     Some("-4") => Some("-4")
     Some("-6") => Some("-6")
     _ => None
@@ -462,14 +462,14 @@ fn build_upload_pack_remote_command(path : String) -> String {
 
 ///|
 fn resolve_upload_pack_local_command() -> String {
-  match @sys.get_env_var("SHIM_EXEC_PATH") {
+  match @env.get_env_var("SHIM_EXEC_PATH") {
     Some(exec_path) =>
       if exec_path.length() > 0 {
         return exec_path + "/git-upload-pack"
       }
     None => ()
   }
-  match @sys.get_env_var("GIT_EXEC_PATH") {
+  match @env.get_env_var("GIT_EXEC_PATH") {
     Some(exec_path) =>
       if exec_path.length() > 0 {
         return exec_path + "/git-upload-pack"
@@ -481,7 +481,7 @@ fn resolve_upload_pack_local_command() -> String {
 
 ///|
 fn quote_shell_arg_single(value : String) -> String {
-  let b = StringBuilder::new()
+  let b = StringBuilder()
   b.write_char('\'')
   for c in value {
     if c == '\'' {
@@ -604,15 +604,15 @@ fn cleanup_temp_files(paths : Array[String]) -> Unit {
 
 ///|
 fn resolve_process_cwd() -> String? {
-  match @sys.get_env_var("GIT_SHIM_CWD") {
+  match @env.get_env_var("GIT_SHIM_CWD") {
     Some(dir) => Some(dir)
-    None => @sys.get_env_var("GIT_SHIM_PWD")
+    None => @env.get_env_var("GIT_SHIM_PWD")
   }
 }
 
 ///|
 fn maybe_trace_packfile(pack : Bytes) -> Unit {
-  match @sys.get_env_var("GIT_TRACE_PACKFILE") {
+  match @env.get_env_var("GIT_TRACE_PACKFILE") {
     Some(path) => ignore(@fs.write_bytes_to_file(path, pack) catch { _ => () })
     None => ()
   }
@@ -1261,7 +1261,10 @@ pub async fn clone_process_to_fs(
   if wants.length() == 0 {
     return refs
   }
-  let pack = fetch_pack_process(remote, wants, prefer_v2, depth~, filter~)
+  let fetched = fetch_pack_process_result(
+    remote, wants, prefer_v2, depth~, filter~,
+  )
+  let pack = fetched.pack
   let objects = @pack.parse_packfile(pack)
   let git_dir = @bit.join_path(root, ".git")
   let pack_id = read_pack_trailer_id(pack)
@@ -1290,24 +1293,13 @@ pub async fn clone_process_to_fs(
         )
       }
   }
-  if depth > 0 {
-    let shallow_ids : Array[String] = []
-    let seen : Map[String, Bool] = Map([])
-    for id in wants {
-      let hex = id.to_hex()
-      if seen.contains(hex) {
-        continue
-      }
-      seen[hex] = true
-      shallow_ids.push(hex)
-    }
-    if shallow_ids.length() > 0 {
-      fs.write_string(
-        @bit.join_path(git_dir, "shallow"),
-        shallow_ids.join("\n") + "\n",
-      )
-    }
-  }
+  // The boundary is whatever the server reported as shallow, not the refs we
+  // wanted: those coincide only at depth 1. Recording the tips instead makes
+  // every deeper clone look parentless at its tip, which then truncates the
+  // history a repack keeps.
+  @repo.apply_shallow_updates(
+    fs, rfs, git_dir, fetched.shallow, fetched.unshallow,
+  )
   refs
 }
 

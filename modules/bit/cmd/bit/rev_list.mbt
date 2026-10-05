@@ -600,6 +600,13 @@ async fn handle_rev_list(args : Array[String]) -> Unit raise Error {
   } else {
     Map([])
   }
+  // Commits on the shallow boundary are grafted: their parents were never
+  // fetched. Following those links emits an id whose object is not in the
+  // store, so the walk must stop here exactly as `log` does.
+  let shallow_boundary : Map[String, Bool] = Map([])
+  for id in @repo.read_shallow_boundaries(fs, git_dir) {
+    shallow_boundary[id.to_hex()] = true
+  }
   let visited : Map[String, Bool] = Map([])
   let result : Array[@bitcore.ObjectId] = []
   // BFS/DFS traversal — collect ALL reachable commits, then sort/slice
@@ -618,7 +625,9 @@ async fn handle_rev_list(args : Array[String]) -> Unit raise Error {
     // Get commit and add parents
     match rev_list_load_commit_info(db, fs, id) {
       Some(info) =>
-        if first_parent && info.parents.length() > 0 {
+        if shallow_boundary.contains(hex) {
+          ()
+        } else if first_parent && info.parents.length() > 0 {
           if !visited.contains(info.parents[0].to_hex()) {
             queue.push(info.parents[0])
           }
@@ -878,7 +887,7 @@ async fn handle_rev_list(args : Array[String]) -> Unit raise Error {
     }
     None =>
       for id in sliced_result {
-        let buf = StringBuilder::new()
+        let buf = StringBuilder()
         let hex = id.to_hex()
         buf.write_string(
           rev_list_output_prefix(
@@ -1267,7 +1276,6 @@ fn rev_list_is_long_numeric_option(arg : String) -> Bool {
 ///|
 async fn rev_list_parse_int_or_die(value : String) -> Int raise Error {
   @string.parse_int(value) catch {
-    err if @async.is_cancellation_error(err) => raise err
     _ => {
       eprint_line("fatal: not an integer: " + value)
       @sys.exit(128)
@@ -1663,7 +1671,7 @@ async fn rev_list_test_bitmap(fs : OsFs, git_dir : String) -> Unit raise Error {
 
 ///|
 fn emit_revindex_trace(fs : OsFs, kind : String) -> Unit {
-  match @sys.get_env_var("GIT_TRACE2_EVENT") {
+  match @env.get_env_var("GIT_TRACE2_EVENT") {
     Some(path) => {
       let target = path.trim().to_owned()
       if target.length() == 0 || target == "1" || target == "2" {

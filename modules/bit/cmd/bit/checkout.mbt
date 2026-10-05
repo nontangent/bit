@@ -280,11 +280,10 @@ async fn handle_checkout(args : Array[String]) -> Unit raise Error {
 fn checkout_cleanup_merge_state_files(
   fs : &@bitcore.FileSystem,
   git_dir : String,
-) -> Unit raise Error {
+) -> Unit {
   let files = ["MERGE_HEAD", "MERGE_MSG", "MERGE_MODE", "SQUASH_MSG"]
   for file in files {
     fs.remove_file(git_dir + "/" + file) catch {
-      err if @async.is_cancellation_error(err) => raise err
       _ => ()
     }
   }
@@ -300,14 +299,14 @@ fn checkout_append_head_reflog(
   old_id : @bitcore.ObjectId,
   new_id : @bitcore.ObjectId,
 ) -> Unit raise Error {
-  let name = match @sys.get_env_var("GIT_COMMITTER_NAME") {
+  let name = match @env.get_env_var("GIT_COMMITTER_NAME") {
     Some(n) => n
-    None => @sys.get_env_var("USER").unwrap_or("Unknown")
+    None => @env.get_env_var("USER").unwrap_or("Unknown")
   }
-  let email = match @sys.get_env_var("GIT_COMMITTER_EMAIL") {
+  let email = match @env.get_env_var("GIT_COMMITTER_EMAIL") {
     Some(e) => e
     None =>
-      match @sys.get_env_var("USER") {
+      match @env.get_env_var("USER") {
         Some(u) => u + "@localhost"
         None => "unknown@localhost"
       }
@@ -677,7 +676,6 @@ async fn checkout_with_promisor_retry(
       @bitlib.sparse_checkout_reapply(fs, fs, root)
     }
     @bitlibnative.apply_worktree_modes_from_commit(fs, fs, root, git_dir, id) catch {
-      err if @async.is_cancellation_error(err) => raise err
       _ => ()
     }
     return id
@@ -718,11 +716,11 @@ fn collect_missing_checkout_blob_ids(
 
 ///|
 fn append_checkout_fetch_trace(fs : OsFs) -> Unit {
-  match @sys.get_env_var("GIT_TRACE_PACKET") {
+  match @env.get_env_var("GIT_TRACE_PACKET") {
     Some(path) => append_checkout_trace_line(fs, path, "fetch> done\n")
     None => ()
   }
-  match @sys.get_env_var("GIT_TRACE2_EVENT") {
+  match @env.get_env_var("GIT_TRACE2_EVENT") {
     Some(path) =>
       append_checkout_trace_line(
         fs, path, "{\"event\":\"data\",\"category\":\"fetch\",\"key\":\"total_rounds\",\"value\":\"1\"}\n",
