@@ -1,14 +1,15 @@
 name: Setup MoonBit
-description: Install the repository's pinned MoonBit toolchain
+description: Install the MoonBit toolchain (latest unless a version is given)
 
 inputs:
   version:
     description: MoonBit toolchain version
     required: false
-    # Keep this on the toolchain the workspace is verified against: the
-    # dependency pins in modules/*/moon.mod (moonbitlang/async 0.22,
-    # moonbitlang/x 0.5, bobzhang/toml 0.4) need the 2026-09 compiler.
-    default: "0.10.13+cbb11c36f"
+    # cli.moonbitlang.com answers 403 for every release except `latest`, so a
+    # pinned version stops installing as soon as a newer one ships. Build on
+    # latest and fix the code when a new compiler breaks it; pass `version`
+    # only to try a specific release while it is still downloadable.
+    default: "latest"
 
 runs:
   using: composite
